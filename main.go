@@ -59,6 +59,12 @@ func run(providerName string, upgrade bool) error {
 	// find the usages of each package
 	for _, oldSdkPath := range *importPaths {
 		log.Printf("[DEBUG] Package %q", oldSdkPath)
+
+		// if it's internal we can't compile it
+		if strings.Contains(oldSdkPath, "/internal") {
+			continue
+		}
+
 		types, err := locator.LocateUsagesOfSDK(codePath, oldSdkPath)
 		if err != nil {
 			return err
@@ -71,6 +77,12 @@ func run(providerName string, upgrade bool) error {
 
 		sdkTypes := make([]codegen.TerraformTypeInfo, 0)
 		for _, typeName := range *types {
+			// if it's not public we can't compile it
+			isPublic := string(typeName[0]) == strings.ToUpper(string(typeName[0]))
+			if !isPublic {
+				continue
+			}
+
 			sdkTypes = append(sdkTypes, codegen.TerraformTypeInfo{
 				Package: oldSdkPath,
 				ImportType: typeName,
@@ -96,7 +108,9 @@ func run(providerName string, upgrade bool) error {
 		// we have to do this since the Go compiler doesn't ship the types unless they're being used
 		// hence this terrible hack
 		if err := generateHack(goSrcPath, repositoryFullPath, oldSdkPath, newSdkPath, sdkTypes); err != nil {
-			return fmt.Errorf("Error running hack: %s", err)
+			// we should error here but the AWS SDK references things in an `internal` directory
+			// such that we can't guarantee this
+			log.Printf("Error running hack: %s", err)
 		}
 	}
 
